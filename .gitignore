@@ -1,0 +1,10 @@
+.env
+__pycache__/
+build/
+.dart_tool/
+*.jks
+key.properties
+venv/
+.idea/
+*.iml
+mobile/build/
