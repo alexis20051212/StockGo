@@ -63,6 +63,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Image.asset('assets/logo.jpg', width: 400),
                       ),
                     ),
+                    Image.asset('assets/mascota/principal.png', height: 200),
+                    const SizedBox(height: 6),
+                    const Text('¡Juntos hacemos que tu inventario avance!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 15, fontStyle: FontStyle.italic, fontWeight: FontWeight.w600, color: AppColors.navy)),
                     const SizedBox(height: 16),
                     Card(
                       elevation: 4,

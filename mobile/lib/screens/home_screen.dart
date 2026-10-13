@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import 'login_screen.dart';
+import '../widgets/peeking_dialog.dart';
 import 'scanner_screen.dart';
 
 void _toast(BuildContext c, String m, {bool error = true}) =>
     ScaffoldMessenger.of(c).showSnackBar(SnackBar(
-        content: Text(m),
+        content: Row(children: [
+          Image.asset(error ? 'assets/mascota/sorprendido.png' : 'assets/mascota/emocionado.png', height: 38),
+          const SizedBox(width: 12),
+          Expanded(child: Text(m)),
+        ]),
         behavior: SnackBarBehavior.floating,
         backgroundColor: error ? AppColors.red : AppColors.green));
 
@@ -59,15 +64,20 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _Empty extends StatelessWidget {
-  final IconData icon;
+  final String asset;
   final String text;
-  const _Empty(this.icon, this.text);
+  const _Empty(this.asset, this.text);
   @override
   Widget build(BuildContext context) => ListView(children: [
-        const SizedBox(height: 90),
-        Icon(icon, size: 72, color: Colors.blueGrey.shade200),
-        const SizedBox(height: 12),
-        Center(child: Text(text, style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 16))),
+        const SizedBox(height: 40),
+        Center(child: Image.asset(asset, height: 190)),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(text,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.blueGrey.shade500, fontSize: 16, fontWeight: FontWeight.w600)),
+        ),
       ]);
 }
 
@@ -171,7 +181,7 @@ class _InventoryViewState extends State<InventoryView> {
     await showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
+        builder: (ctx, set) => PeekingDialog(
           title: const Text('Nuevo producto'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -287,9 +297,9 @@ class _InventoryViewState extends State<InventoryView> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? _Empty(Icons.wifi_off, _error!)
+                    ? _Empty('assets/mascota/sorprendido.png', _error!)
                     : list.isEmpty
-                        ? _Empty(Icons.inventory_2_outlined, _q.isEmpty ? 'Aún no hay productos' : 'Sin resultados')
+                        ? _Empty('assets/mascota/pose_caja.png', _q.isEmpty ? 'Aún no hay productos. ¡Agrega el primero!' : 'Sin resultados')
                         : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
                             itemCount: list.length,
@@ -440,9 +450,9 @@ class MovementsView extends StatelessWidget {
   Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
         future: MovementRepository().list(),
         builder: (_, s) {
-          if (s.hasError) return _Empty(Icons.wifi_off, '${s.error}');
+          if (s.hasError) return _Empty('assets/mascota/sorprendido.png', '${s.error}');
           if (!s.hasData) return const Center(child: CircularProgressIndicator());
-          if (s.data!.isEmpty) return const _Empty(Icons.history, 'Aún no hay movimientos');
+          if (s.data!.isEmpty) return const _Empty('assets/mascota/pose_app.png', 'Aún no hay movimientos');
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: s.data!.length,
