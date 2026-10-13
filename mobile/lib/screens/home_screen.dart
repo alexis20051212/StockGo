@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import 'login_screen.dart';
+import 'scanner_screen.dart';
 
 void _toast(BuildContext c, String m, {bool error = true}) =>
     ScaffoldMessenger.of(c).showSnackBar(SnackBar(
@@ -145,6 +146,24 @@ class _InventoryViewState extends State<InventoryView> {
     }
   }
 
+  Future<Map<String, dynamic>?> _lookup(String c) async {
+    try {
+      return await _products.lookupBarcode(c.trim());
+    } catch (e) {
+      if (mounted) _toast(context, '$e');
+      return null;
+    }
+  }
+
+  Future<void> _scan(TextEditingController code, void Function(Map<String, dynamic>) apply) async {
+    final scanned = await Navigator.of(context, rootNavigator: true)
+        .push<String>(MaterialPageRoute(builder: (_) => const ScannerScreen()));
+    if (scanned == null) return;
+    code.text = scanned;
+    final r = await _lookup(scanned);
+    if (r != null) apply(r);
+  }
+
   Future<void> _addProduct() async {
     final code = TextEditingController(), nombre = TextEditingController(),
         marca = TextEditingController(), cat = TextEditingController();
@@ -156,6 +175,22 @@ class _InventoryViewState extends State<InventoryView> {
           title: const Text('Nuevo producto'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Escanear con la cámara'),
+                  onPressed: () => _scan(code, (r) {
+                    set(() {
+                      nombre.text = r['nombre'] ?? '';
+                      marca.text = r['marca'] ?? '';
+                      cat.text = r['categoria'] ?? '';
+                      img = r['imagen_url'];
+                    });
+                  }),
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(children: [
                 Expanded(
                     child: TextField(
@@ -166,16 +201,14 @@ class _InventoryViewState extends State<InventoryView> {
                   icon: const Icon(Icons.search),
                   tooltip: 'Buscar en Open Food Facts',
                   onPressed: () async {
-                    try {
-                      final r = await _products.lookupBarcode(code.text.trim());
+                    final r = await _lookup(code.text);
+                    if (r != null) {
                       set(() {
                         nombre.text = r['nombre'] ?? '';
                         marca.text = r['marca'] ?? '';
                         cat.text = r['categoria'] ?? '';
                         img = r['imagen_url'];
                       });
-                    } catch (e) {
-                      if (mounted) _toast(context, '$e');
                     }
                   },
                 ),
