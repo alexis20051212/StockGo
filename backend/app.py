@@ -1,4 +1,4 @@
-import os, functools, datetime
+import os, functools, datetime, string
 import jwt, requests, mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, g
@@ -59,6 +59,25 @@ def auth(roles=None):
     return deco
 
 
+def validar_password(pw):
+    """None si la contraseña es válida; si no, un mensaje con lo que falta."""
+    if not isinstance(pw, str):
+        return "Contraseña inválida"
+    if len(pw) > 128:
+        return "La contraseña es demasiado larga (máximo 128 caracteres)"
+    falta = []
+    if len(pw) < 8:
+        falta.append("al menos 8 caracteres")
+    if not any(c in string.digits for c in pw):
+        falta.append("un número")
+    if not any(c in string.punctuation for c in pw):
+        falta.append("un carácter especial")
+    if not falta:
+        return None
+    lista = falta[0] if len(falta) == 1 else ", ".join(falta[:-1]) + " y " + falta[-1]
+    return "La contraseña necesita " + lista
+
+
 def need(data, *fields):
     return [f for f in fields if not str(data.get(f, "")).strip()]
 
@@ -87,8 +106,11 @@ def register():
     if query("SELECT id FROM usuarios LIMIT 1", one=True):
         return jsonify(error="Registro cerrado; un administrador debe crear tu cuenta"), 403
     d = request.get_json(silent=True) or {}
-    if need(d, "nombre", "email", "password") or len(d["password"]) < 6:
-        return jsonify(error="Datos inválidos (contraseña mínimo 6 caracteres)"), 400
+    if need(d, "nombre", "email", "password") or "@" not in d["email"]:
+        return jsonify(error="Escribe nombre, un correo válido y contraseña"), 400
+    err = validar_password(d["password"])
+    if err:
+        return jsonify(error=err), 400
     uid = query("INSERT INTO usuarios(nombre,email,password_hash,rol) VALUES(%s,%s,%s,'admin')",
                 (d["nombre"], d["email"], generate_password_hash(d["password"])), write=True)
     return jsonify(id=uid), 201
@@ -212,8 +234,9 @@ def create_user():
     d = request.get_json(silent=True) or {}
     if need(d, "nombre", "email", "password") or "@" not in d["email"]:
         return jsonify(error="Escribe nombre, un correo válido y contraseña"), 400
-    if len(d["password"]) < 6:
-        return jsonify(error="La contraseña debe tener al menos 6 caracteres"), 400
+    err = validar_password(d["password"])
+    if err:
+        return jsonify(error=err), 400
     if d.get("rol", "empleado") not in ("admin", "empleado"):
         return jsonify(error="Rol inválido"), 400
     try:
@@ -240,8 +263,9 @@ def update_user(uid):
         return jsonify(error="No puedes quitarte tu propio rol ni desactivar tu cuenta"), 400
     sets, params = ["rol=%s", "activo=%s"], [rol, activo]
     if d.get("password"):
-        if len(d["password"]) < 6:
-            return jsonify(error="La contraseña debe tener al menos 6 caracteres"), 400
+        err = validar_password(d["password"])
+        if err:
+            return jsonify(error=err), 400
         sets.append("password_hash=%s")
         params.append(generate_password_hash(d["password"]))
     query("UPDATE usuarios SET " + ", ".join(sets) + " WHERE id=%s", (*params, uid), write=True)
