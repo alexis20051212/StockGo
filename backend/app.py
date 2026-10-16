@@ -42,11 +42,18 @@ def auth(roles=None):
         def wrapper(*a, **k):
             token = request.headers.get("Authorization", "").removeprefix("Bearer ")
             try:
-                g.user = jwt.decode(token, SECRET, algorithms=["HS256"])
+                p = jwt.decode(token, SECRET, algorithms=["HS256"])
             except Exception:
                 return jsonify(error="Token inválido o expirado"), 401
-            if roles and g.user["rol"] not in roles:
-                return jsonify(error="No tienes permisos"), 403
+            if roles and p["rol"] not in roles:
+                return jsonify(error="No tienes permisos para esta acción"), 403
+            # El rol y el estado se leen de la base: un cambio del admin aplica de inmediato
+            u = query("SELECT id,rol,activo FROM usuarios WHERE id=%s", (p["id"],), one=True)
+            if not u or not u["activo"]:
+                return jsonify(error="Tu cuenta está desactivada"), 401
+            if roles and u["rol"] not in roles:
+                return jsonify(error="No tienes permisos para esta acción"), 403
+            g.user = {"id": u["id"], "rol": u["rol"]}
             return f(*a, **k)
         return wrapper
     return deco
@@ -192,21 +199,29 @@ def movements():
     return jsonify([{**r, "fecha": r["fecha"].isoformat()} for r in rows])
 
 
-# ---------- USUARIOS (admin) ----------
+# ---------- USUARIOS (solo administrador) ----------
 @app.get("/users")
 @auth(["admin"])
 def users():
-    return jsonify(query("SELECT id,nombre,email,rol,activo FROM usuarios"))
+    return jsonify(query("SELECT id,nombre,email,rol,activo FROM usuarios ORDER BY rol, nombre"))
 
 
 @app.post("/users")
 @auth(["admin"])
 def create_user():
     d = request.get_json(silent=True) or {}
-    if need(d, "nombre", "email", "password") or d.get("rol") not in ("admin", "empleado"):
-        return jsonify(error="Datos inválidos"), 400
-    uid = query("INSERT INTO usuarios(nombre,email,password_hash,rol) VALUES(%s,%s,%s,%s)",
-                (d["nombre"], d["email"], generate_password_hash(d["password"]), d["rol"]), write=True)
+    if need(d, "nombre", "email", "password") or "@" not in d["email"]:
+        return jsonify(error="Escribe nombre, un correo válido y contraseña"), 400
+    if len(d["password"]) < 6:
+        return jsonify(error="La contraseña debe tener al menos 6 caracteres"), 400
+    if d.get("rol", "empleado") not in ("admin", "empleado"):
+        return jsonify(error="Rol inválido"), 400
+    try:
+        uid = query("INSERT INTO usuarios(nombre,email,password_hash,rol) VALUES(%s,%s,%s,%s)",
+                    (d["nombre"].strip(), d["email"].strip(), generate_password_hash(d["password"]),
+                     d.get("rol", "empleado")), write=True)
+    except mysql.connector.IntegrityError:
+        return jsonify(error="Ya existe un usuario con ese correo"), 409
     return jsonify(id=uid), 201
 
 
@@ -214,8 +229,22 @@ def create_user():
 @auth(["admin"])
 def update_user(uid):
     d = request.get_json(silent=True) or {}
-    query("UPDATE usuarios SET rol=COALESCE(%s,rol), activo=COALESCE(%s,activo) WHERE id=%s",
-          (d.get("rol"), d.get("activo"), uid), write=True)
+    t = query("SELECT id,rol,activo FROM usuarios WHERE id=%s", (uid,), one=True)
+    if not t:
+        return jsonify(error="Usuario no encontrado"), 404
+    rol = d.get("rol", t["rol"])
+    activo = 1 if d.get("activo", t["activo"]) else 0
+    if rol not in ("admin", "empleado"):
+        return jsonify(error="Rol inválido"), 400
+    if uid == g.user["id"] and (rol != t["rol"] or not activo):
+        return jsonify(error="No puedes quitarte tu propio rol ni desactivar tu cuenta"), 400
+    sets, params = ["rol=%s", "activo=%s"], [rol, activo]
+    if d.get("password"):
+        if len(d["password"]) < 6:
+            return jsonify(error="La contraseña debe tener al menos 6 caracteres"), 400
+        sets.append("password_hash=%s")
+        params.append(generate_password_hash(d["password"]))
+    query("UPDATE usuarios SET " + ", ".join(sets) + " WHERE id=%s", (*params, uid), write=True)
     return jsonify(ok=True)
 
 
