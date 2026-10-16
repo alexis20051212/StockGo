@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/password_rules.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import '../widgets/peeking_dialog.dart';
@@ -61,10 +62,13 @@ class _UsersViewState extends State<UsersView> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Nueva contraseña para ${u.nombre}'),
-        content: TextField(
-            controller: pass,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Contraseña (mínimo 6)')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: pass,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Nueva contraseña')),
+          Padding(padding: const EdgeInsets.only(top: 8), child: PasswordChecklist(pass)),
+        ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
           FilledButton(
@@ -74,7 +78,13 @@ class _UsersViewState extends State<UsersView> {
         ],
       ),
     );
-    if (ok == true) _update(u, {'password': pass.text}, 'Contraseña actualizada');
+    if (ok != true) return;
+    final err = PasswordRules.error(pass.text);
+    if (err != null) {
+      if (mounted) _msg(context, err);
+      return;
+    }
+    _update(u, {'password': pass.text}, 'Contraseña actualizada');
   }
 
   Future<void> _create() async {
@@ -97,7 +107,8 @@ class _UsersViewState extends State<UsersView> {
               TextField(
                   controller: pass,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Contraseña (mínimo 6)')),
+                  decoration: const InputDecoration(labelText: 'Contraseña')),
+              Padding(padding: const EdgeInsets.only(top: 8), child: PasswordChecklist(pass)),
               const SizedBox(height: 14),
               SegmentedButton<String>(
                 segments: const [
@@ -114,6 +125,11 @@ class _UsersViewState extends State<UsersView> {
             FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size(100, 44)),
               onPressed: () async {
+                final err = PasswordRules.error(pass.text);
+                if (err != null) {
+                  _msg(context, err);
+                  return;
+                }
                 try {
                   await _repo.create({
                     'nombre': nombre.text.trim(), 'email': email.text.trim(),

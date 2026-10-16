@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/password_rules.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import 'home_screen.dart';
@@ -21,6 +22,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_firstRun) {
+      final err = PasswordRules.error(_pass.text);
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(err), behavior: SnackBarBehavior.floating, backgroundColor: AppColors.red));
+        return;
+      }
+    }
     setState(() => _loading = true);
     try {
       if (_firstRun) await _repo.registerFirstAdmin(_nombre.text.trim(), _email.text.trim(), _pass.text);
@@ -106,6 +115,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: () => setState(() => _hide = !_hide)),
                             ),
                           ),
+                          if (_firstRun)
+                            Padding(padding: const EdgeInsets.only(top: 8), child: PasswordChecklist(_pass)),
                           const SizedBox(height: 22),
                           FilledButton(
                             onPressed: _loading ? null : _submit,

@@ -1,7 +1,7 @@
 import os, sys
 os.environ.setdefault("SECRET_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
-from app import app, make_token, need
+from app import app, make_token, need, validar_password
 
 
 def test_need_detecta_campos_vacios():
@@ -29,3 +29,17 @@ def test_empleado_no_puede_eliminar_productos():
     t = make_token({"id": 2, "rol": "empleado"})
     r = app.test_client().delete("/products/1", headers={"Authorization": f"Bearer {t}"})
     assert r.status_code == 403
+
+
+def test_contrasena_valida():
+    assert validar_password("Stock#2026") is None
+    assert validar_password("abcdef1!") is None  # justo 8 caracteres
+
+
+def test_contrasena_invalida_dice_que_falta():
+    assert "8 caracteres" in validar_password("a1!")
+    assert "un número" in validar_password("abcdefgh!")
+    assert "un carácter especial" in validar_password("abcdefg1")
+    msg = validar_password("abc")
+    assert "8 caracteres" in msg and "un número" in msg and "especial" in msg
+    assert validar_password("x" * 200) is not None
