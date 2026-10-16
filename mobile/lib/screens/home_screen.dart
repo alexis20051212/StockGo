@@ -4,6 +4,7 @@ import '../repositories/repositories.dart';
 import 'login_screen.dart';
 import '../widgets/peeking_dialog.dart';
 import 'scanner_screen.dart';
+import 'users_screen.dart';
 
 void _toast(BuildContext c, String m, {bool error = true}) =>
     ScaffoldMessenger.of(c).showSnackBar(SnackBar(
@@ -51,13 +52,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ]),
           actions: [IconButton(icon: const Icon(Icons.logout), tooltip: 'Cerrar sesión', onPressed: _logout)],
         ),
-        body: _tab == 0 ? InventoryView(isAdmin: _isAdmin) : const MovementsView(),
+        body: _tab == 0
+            ? InventoryView(isAdmin: _isAdmin)
+            : _tab == 1
+                ? const MovementsView()
+                : const UsersView(),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Inventario'),
-            NavigationDestination(icon: Icon(Icons.swap_vert), selectedIcon: Icon(Icons.swap_vert_circle), label: 'Movimientos'),
+          destinations: [
+            const NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Inventario'),
+            const NavigationDestination(icon: Icon(Icons.swap_vert), selectedIcon: Icon(Icons.swap_vert_circle), label: 'Movimientos'),
+            if (_isAdmin)
+              const NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group), label: 'Usuarios'),
           ],
         ),
       );

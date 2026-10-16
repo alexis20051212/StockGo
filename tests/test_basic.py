@@ -16,3 +16,16 @@ def test_empleado_no_puede_crear_producto():
     t = make_token({"id": 1, "rol": "empleado"})
     r = app.test_client().post("/products", json={"nombre": "x"}, headers={"Authorization": f"Bearer {t}"})
     assert r.status_code == 403
+
+
+def test_empleado_no_puede_administrar_usuarios():
+    t = make_token({"id": 2, "rol": "empleado"})
+    h = {"Authorization": f"Bearer {t}"}
+    assert app.test_client().get("/users", headers=h).status_code == 403
+    assert app.test_client().post("/users", json={}, headers=h).status_code == 403
+
+
+def test_empleado_no_puede_eliminar_productos():
+    t = make_token({"id": 2, "rol": "empleado"})
+    r = app.test_client().delete("/products/1", headers={"Authorization": f"Bearer {t}"})
+    assert r.status_code == 403
