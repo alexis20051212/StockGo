@@ -59,3 +59,25 @@ class MovementRepository {
 
   Future<List<dynamic>> list() async => await _api.request('GET', '/movements');
 }
+
+class UserItem {
+  final int id;
+  final String nombre, email, rol;
+  final bool activo;
+  UserItem.fromJson(Map<String, dynamic> j)
+      : id = j['id'],
+        nombre = j['nombre'],
+        email = j['email'],
+        rol = j['rol'],
+        activo = j['activo'] == 1 || j['activo'] == true;
+}
+
+class UserRepository {
+  final _api = ApiClient();
+
+  Future<List<UserItem>> list() async =>
+      (await _api.request('GET', '/users') as List).map((j) => UserItem.fromJson(j)).toList();
+
+  Future<void> create(Map<String, dynamic> data) => _api.request('POST', '/users', body: data);
+  Future<void> update(int id, Map<String, dynamic> data) => _api.request('PUT', '/users/$id', body: data);
+}
