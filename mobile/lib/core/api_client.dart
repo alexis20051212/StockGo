@@ -19,6 +19,7 @@ class ApiClient {
   // En release usar HTTPS: flutter build apk --release --dart-define=API_URL=https://tu-backend
   static const baseUrl =
       String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:5000');
+  static const timeoutSeconds = int.fromEnvironment('API_TIMEOUT', defaultValue: 20);
   final _storage = const FlutterSecureStorage();
 
   Future<void> saveSession(String token, String rol, String nombre) async {
@@ -40,7 +41,7 @@ class ApiClient {
     if (body != null) req.body = jsonEncode(body);
     try {
       final res = await http.Response.fromStream(
-          await req.send().timeout(const Duration(seconds: 15)));
+          await req.send().timeout(const Duration(seconds: timeoutSeconds)));
       final data = res.body.isEmpty ? null : jsonDecode(res.body);
       if (res.statusCode >= 400) {
         throw ApiException((data is Map ? data['error'] : null) ?? 'Error del servidor', res.statusCode);

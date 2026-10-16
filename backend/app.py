@@ -10,10 +10,17 @@ SECRET = os.environ["SECRET_KEY"]  # variable de entorno, nunca en código
 
 
 def conn():
-    return mysql.connector.connect(
-        host=os.getenv("DB_HOST"), port=int(os.getenv("DB_PORT", "3306")),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"), database=os.getenv("DB_NAME"))
+    cfg = dict(host=os.getenv("DB_HOST"), port=int(os.getenv("DB_PORT", "3306")),
+               user=os.getenv("DB_USER"), password=os.getenv("DB_PASSWORD"),
+               database=os.getenv("DB_NAME"))
+    if os.getenv("DB_SSL", "").lower() == "true":  # bases de datos en la nube (Aiven)
+        cfg["ssl_disabled"] = False
+        ca = os.getenv("DB_SSL_CA")
+        if ca:
+            cfg["ssl_ca"] = os.path.join(os.path.dirname(__file__), ca)
+        else:
+            cfg["ssl_verify_cert"] = False
+    return mysql.connector.connect(**cfg)
 
 
 def query(sql, params=(), one=False, write=False):
@@ -52,6 +59,13 @@ def need(data, *fields):
 def make_token(u):
     exp = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     return jwt.encode({"id": u["id"], "rol": u["rol"], "exp": exp}, SECRET, algorithm="HS256")
+
+
+# ---------- SALUD (la nube lo usa para saber que el servicio está vivo) ----------
+@app.get("/")
+@app.get("/health")
+def health():
+    return jsonify(app="StockGo API", status="ok")
 
 
 # ---------- AUTH ----------
@@ -226,4 +240,4 @@ def barcode(code):
 
 
 if __name__ == "__main__":
-   app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
