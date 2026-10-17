@@ -273,23 +273,39 @@ def update_user(uid):
 
 
 # ---------- API EXTERNA: Open Food Facts ----------
+OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
+OFF_FIELDS = "code,product_name,brands,categories,image_front_url"
+
+
 @app.get("/barcode/<code>")
 @auth(["admin"])
 def barcode(code):
-    if not code.isdigit():
-        return jsonify(error="Código inválido"), 400
+    """Consulta un producto por código de barras en Open Food Facts."""
+    if not code.isdigit() or not 8 <= len(code) <= 14:
+        return jsonify(error="Código de barras inválido"), 400
     try:
-        r = requests.get(f"https://world.openfoodfacts.org/api/v2/product/{code}.json",
-                         headers={"User-Agent": "StockGo/1.0 (proyecto escolar)"}, timeout=8)
+        r = requests.get(
+            OFF_URL.format(code),
+            params={"fields": OFF_FIELDS},
+            headers={"User-Agent": "StockGo/1.0 (proyecto escolar)"},
+            timeout=8,
+        )
         data = r.json()
     except (requests.RequestException, ValueError):
         return jsonify(error="No se pudo contactar Open Food Facts"), 502
+    if r.status_code >= 500:
+        return jsonify(error="Open Food Facts no está disponible"), 502
     if data.get("status") != 1:
         return jsonify(error="Producto no encontrado en Open Food Facts"), 404
     p = data["product"]
-    return jsonify(codigo_barras=code, nombre=p.get("product_name", ""), marca=p.get("brands", ""),
-                   categoria=(p.get("categories", "") or "").split(",")[0].strip(),
-                   imagen_url=p.get("image_front_url", ""))
+    categoria = (p.get("categories") or "").split(",")[0].strip()
+    return jsonify(
+        codigo_barras=code,
+        nombre=p.get("product_name", ""),
+        marca=p.get("brands", ""),
+        categoria=categoria,
+        imagen_url=p.get("image_front_url", ""),
+    )
 
 
 if __name__ == "__main__":
