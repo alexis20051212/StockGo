@@ -290,11 +290,17 @@ def barcode(code):
             headers={"User-Agent": "StockGo/1.0 (proyecto escolar)"},
             timeout=8,
         )
-        data = r.json()
-    except (requests.RequestException, ValueError):
+    except requests.RequestException:
         return jsonify(error="No se pudo contactar Open Food Facts"), 502
+    if r.status_code == 429:  # límite de consultas del proveedor
+        return jsonify(error="Open Food Facts limitó las consultas. "
+                             "Intenta de nuevo en un minuto."), 429
     if r.status_code >= 500:
         return jsonify(error="Open Food Facts no está disponible"), 502
+    try:
+        data = r.json()
+    except ValueError:
+        return jsonify(error="Respuesta inválida de Open Food Facts"), 502
     if data.get("status") != 1:
         return jsonify(error="Producto no encontrado en Open Food Facts"), 404
     p = data["product"]
