@@ -59,7 +59,7 @@ class ApiClient {
   Future<String?> readCache(String key) => _storage.read(key: 'cache_$key');
 
   Future<dynamic> request(String method, String path,
-      {Map<String, dynamic>? body}) async {
+      {Map<String, dynamic>? body, bool raw = false}) async {
     // 3. Crear la solicitud (método, URL, encabezados y cuerpo)
     final headers = {
       'Content-Type': 'application/json',
@@ -91,6 +91,9 @@ class ApiClient {
       throw ApiException('Sin conexión con el servidor. Revisa tu red.',
           null, ApiError.sinConexion);
     }
+
+    // Respuestas de texto (por ejemplo, el CSV del inventario)
+    if (raw && res.statusCode < 400) return utf8.decode(res.bodyBytes, allowMalformed: true);
 
     // 6. Procesar el JSON
     dynamic data;

@@ -6,7 +6,7 @@ class Product {
   final int id;
   final String nombre;
   final String? marca, categoria, codigoBarras, imagenUrl;
-  final int stock;
+  final int stock, stockMinimo;
   Product.fromJson(Map<String, dynamic> j)
       : id = j['id'],
         nombre = j['nombre'],
@@ -14,7 +14,9 @@ class Product {
         categoria = j['categoria'],
         codigoBarras = j['codigo_barras'],
         imagenUrl = j['imagen_url'],
-        stock = j['stock'];
+        stock = j['stock'],
+        stockMinimo = (j['stock_minimo'] ?? 5) as int;
+  bool get bajo => stock <= stockMinimo;
 }
 
 class AuthRepository {
@@ -34,7 +36,14 @@ class AuthRepository {
       _api.request('POST', '/auth/register', body: {'nombre': nombre, 'email': email, 'password': password});
 
   Future<Map<String, dynamic>> profile() async => await _api.request('GET', '/me');
-  Future<void> updateProfile(String nombre) => _api.request('PUT', '/me', body: {'nombre': nombre});
+  Future<void> updateProfile(String nombre) async {
+    await _api.request('PUT', '/me', body: {'nombre': nombre});
+    final t = await _api.token, r = await _api.rol;
+    if (t != null && r != null) await _api.saveSession(t, r, nombre);
+  }
+
+  Future<void> changePassword(String actual, String nueva) =>
+      _api.request('PUT', '/me/password', body: {'actual': actual, 'nueva': nueva});
   Future<void> logout() => _api.clearSession();
 }
 
@@ -66,6 +75,9 @@ class ProductRepository {
   Future<void> update(int id, Map<String, dynamic> data) => _api.request('PUT', '/products/$id', body: data);
   Future<void> delete(int id) => _api.request('DELETE', '/products/$id');
 
+  /// Inventario en CSV (solo administrador).
+  Future<String> exportCsv() async => await _api.request('GET', '/products/export.csv', raw: true) as String;
+
   /// Consulta Open Food Facts a través del backend.
   Future<Map<String, dynamic>> lookupBarcode(String code) async =>
       await _api.request('GET', '/barcode/$code');
@@ -73,9 +85,52 @@ class ProductRepository {
 
 class MovementRepository {
   final _api = ApiClient();
+  static const _queueKey = 'queue_movements';
 
-  Future<void> register(int productId, String tipo, int cantidad) => _api.request('POST', '/movements',
-      body: {'product_id': productId, 'tipo': tipo, 'cantidad': cantidad});
+  /// Movimientos guardados sin conexión, pendientes de enviar.
+  Future<List<dynamic>> pending() async {
+    final c = await _api.readCache(_queueKey);
+    return c == null ? [] : jsonDecode(c) as List;
+  }
+
+  /// Devuelve true si se envió; false si se guardó en la cola por falta de internet.
+  Future<bool> register(int productId, String tipo, int cantidad) async {
+    final body = {'product_id': productId, 'tipo': tipo, 'cantidad': cantidad};
+    try {
+      await _api.request('POST', '/movements', body: body);
+      return true;
+    } on ApiException catch (e) {
+      // Solo se encola cuando seguro NO llegó al servidor (evita duplicados por tiempo agotado)
+      if (e.tipo == ApiError.sinConexion) {
+        final q = await pending();
+        q.add(body);
+        await _api.saveCache(_queueKey, jsonEncode(q));
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  /// Envía la cola. Devuelve cuántos se enviaron y cuántos rechazó el servidor.
+  Future<Map<String, int>> flushPending() async {
+    final q = await pending();
+    var sent = 0, failed = 0;
+    final left = <dynamic>[];
+    for (var i = 0; i < q.length; i++) {
+      try {
+        await _api.request('POST', '/movements', body: Map<String, dynamic>.from(q[i]));
+        sent++;
+      } on ApiException catch (e) {
+        if (e.tipo == ApiError.sinConexion || e.tipo == ApiError.tiempoAgotado) {
+          left.addAll(q.sublist(i)); // sigue sin red: conservar lo que falta
+          break;
+        }
+        failed++; // rechazado (stock insuficiente, producto eliminado...): se descarta
+      }
+    }
+    await _api.saveCache(_queueKey, jsonEncode(left));
+    return {'sent': sent, 'failed': failed};
+  }
 
   Future<List<dynamic>> list() async {
     try {
@@ -90,6 +145,14 @@ class MovementRepository {
       rethrow;
     }
   }
+
+  /// Entradas y salidas de los últimos 7 días.
+  Future<List<dynamic>> weekly() async => await _api.request('GET', '/stats/weekly') as List;
+}
+
+class AuditRepository {
+  final _api = ApiClient();
+  Future<List<dynamic>> list() async => await _api.request('GET', '/audit') as List;
 }
 
 class UserItem {

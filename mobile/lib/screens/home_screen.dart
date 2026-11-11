@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
+import 'audit_screen.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import '../widgets/peeking_dialog.dart';
 import 'scanner_screen.dart';
 import 'users_screen.dart';
@@ -36,9 +39,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    final pend = (await MovementRepository().pending()).length;
+    if (pend > 0 && mounted) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Movimientos sin enviar'),
+          content: Text('Tienes $pend movimiento(s) guardado(s) sin conexión. Si cierras sesión se perderán.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cerrar sesión')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
     await AuthRepository().logout();
     if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+  }
+
+  Future<void> _export() async {
+    try {
+      final csv = await ProductRepository().exportCsv();
+      await Clipboard.setData(ClipboardData(text: csv));
+      if (mounted) _toast(context, 'Inventario copiado (CSV). Pégalo en una hoja de cálculo.', error: false);
+    } catch (e) {
+      if (mounted) _toast(context, '$e');
+    }
+  }
+
+  Future<void> _menu(String v) async {
+    switch (v) {
+      case 'perfil':
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+        final n = await AuthRepository().name();
+        if (mounted) setState(() => _nombre = n ?? '');
+        break;
+      case 'audit':
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditScreen()));
+        break;
+      case 'export':
+        await _export();
+        break;
+      case 'logout':
+        await _logout();
+        break;
+    }
   }
 
   @override
@@ -50,7 +97,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('Hola, $_nombre · ${_isAdmin ? 'Administrador' : 'Empleado'}',
                 style: const TextStyle(fontSize: 12, color: Colors.white70)),
           ]),
-          actions: [IconButton(icon: const Icon(Icons.logout), tooltip: 'Cerrar sesión', onPressed: _logout)],
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: _menu,
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'perfil', child: Text('Mi perfil')),
+                if (_isAdmin) const PopupMenuItem(value: 'export', child: Text('Exportar inventario (CSV)')),
+                if (_isAdmin) const PopupMenuItem(value: 'audit', child: Text('Registro de acciones')),
+                const PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
+              ],
+            ),
+          ],
         ),
         body: _tab == 0
             ? InventoryView(isAdmin: _isAdmin)
@@ -99,7 +157,8 @@ class InventoryView extends StatefulWidget {
 class _InventoryViewState extends State<InventoryView> {
   final _products = ProductRepository(), _moves = MovementRepository();
   List<Product> _all = [];
-  String _q = '';
+  String _q = '', _filtro = 'todos', _cat = 'Todas', _orden = 'nombre';
+  int _reload = 0;
   bool _loading = true, _offline = false;
   String? _error;
 
@@ -114,6 +173,12 @@ class _InventoryViewState extends State<InventoryView> {
       _loading = true;
       _error = null;
     });
+    _reload++;
+    try {
+      final r = await _moves.flushPending();
+      if (mounted && r['sent']! > 0) _toast(context, '${r['sent']} movimiento(s) pendiente(s) enviado(s)', error: false);
+      if (mounted && r['failed']! > 0) _toast(context, '${r['failed']} movimiento(s) pendiente(s) fueron rechazados por el servidor');
+    } catch (_) {}
     try {
       _all = await _products.list();
       _offline = _products.fromCache;
@@ -132,8 +197,11 @@ class _InventoryViewState extends State<InventoryView> {
     );
     if (r == null) return;
     try {
-      await _moves.register(p.id, r['tipo'], r['qty']);
-      if (mounted) _toast(context, 'Movimiento registrado', error: false);
+      final enviado = await _moves.register(p.id, r['tipo'], r['qty']);
+      if (mounted) {
+        _toast(context, enviado ? 'Movimiento registrado' : 'Sin conexión: movimiento guardado. Se enviará al volver internet.',
+            error: false);
+      }
       _load();
     } catch (e) {
       if (mounted) _toast(context, '$e');
@@ -205,7 +273,8 @@ class _InventoryViewState extends State<InventoryView> {
   Future<void> _editProduct(Product p) async {
     final nombre = TextEditingController(text: p.nombre),
         marca = TextEditingController(text: p.marca ?? ''),
-        cat = TextEditingController(text: p.categoria ?? '');
+        cat = TextEditingController(text: p.categoria ?? ''),
+        minimo = TextEditingController(text: '${p.stockMinimo}');
     await showDialog(
       context: context,
       builder: (ctx) => PeekingDialog(
@@ -217,6 +286,11 @@ class _InventoryViewState extends State<InventoryView> {
             TextField(controller: marca, decoration: const InputDecoration(labelText: 'Marca')),
             const SizedBox(height: 10),
             TextField(controller: cat, decoration: const InputDecoration(labelText: 'Categoría')),
+            const SizedBox(height: 10),
+            TextField(
+                controller: minimo,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Stock mínimo (alerta)')),
           ]),
         ),
         actions: [
@@ -232,6 +306,7 @@ class _InventoryViewState extends State<InventoryView> {
                 await _products.update(p.id, {
                   'nombre': nombre.text.trim(), 'marca': marca.text.trim(),
                   'categoria': cat.text.trim(), 'imagen_url': p.imagenUrl,
+                  'stock_minimo': int.tryParse(minimo.text.trim()) ?? p.stockMinimo,
                 });
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) _toast(context, 'Producto actualizado', error: false);
@@ -249,7 +324,8 @@ class _InventoryViewState extends State<InventoryView> {
 
   Future<void> _addProduct() async {
     final code = TextEditingController(), nombre = TextEditingController(),
-        marca = TextEditingController(), cat = TextEditingController();
+        marca = TextEditingController(), cat = TextEditingController(),
+        minimo = TextEditingController(text: '5');
     String? img;
     await showDialog(
       context: context,
@@ -296,6 +372,15 @@ class _InventoryViewState extends State<InventoryView> {
                   },
                 ),
               ]),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Generar código interno'),
+                  onPressed: () => set(() => code.text =
+                      '2${(DateTime.now().millisecondsSinceEpoch % 1000000000000).toString().padLeft(12, '0')}'),
+                ),
+              ),
               if (img != null && img!.isNotEmpty)
                 Padding(
                     padding: const EdgeInsets.only(top: 12),
@@ -306,6 +391,11 @@ class _InventoryViewState extends State<InventoryView> {
               TextField(controller: marca, decoration: const InputDecoration(labelText: 'Marca')),
               const SizedBox(height: 10),
               TextField(controller: cat, decoration: const InputDecoration(labelText: 'Categoría')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: minimo,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Stock mínimo (alerta)')),
               const SizedBox(height: 12),
               Text('Datos de producto: Open Food Facts (licencia ODbL)',
                   textAlign: TextAlign.center,
@@ -321,6 +411,7 @@ class _InventoryViewState extends State<InventoryView> {
                   await _products.create({
                     'codigo_barras': code.text.trim(), 'nombre': nombre.text.trim(),
                     'marca': marca.text.trim(), 'categoria': cat.text.trim(), 'imagen_url': img,
+                    'stock_minimo': int.tryParse(minimo.text.trim()) ?? 5,
                   });
                   if (ctx.mounted) Navigator.pop(ctx);
                   _load();
@@ -338,9 +429,21 @@ class _InventoryViewState extends State<InventoryView> {
 
   @override
   Widget build(BuildContext context) {
-    final list = _all.where((p) => p.nombre.toLowerCase().contains(_q.toLowerCase())).toList();
+    final catSet = _all.map((p) => p.categoria ?? '').where((c) => c.isNotEmpty).toSet().toList()..sort();
+    final cats = ['Todas', ...catSet];
+    if (!cats.contains(_cat)) _cat = 'Todas';
+    final list = _all
+        .where((p) => p.nombre.toLowerCase().contains(_q.toLowerCase()))
+        .where((p) => _filtro == 'todos' || p.bajo)
+        .where((p) => _cat == 'Todas' || p.categoria == _cat)
+        .toList();
+    if (_orden == 'stock') {
+      list.sort((a, b) => a.stock.compareTo(b.stock));
+    } else {
+      list.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    }
     final units = _all.fold<int>(0, (a, p) => a + p.stock);
-    final low = _all.where((p) => p.stock <= 5).length;
+    final low = _all.where((p) => p.bajo).length;
     return Scaffold(
       floatingActionButton: widget.isAdmin
           ? FloatingActionButton.extended(
@@ -363,11 +466,35 @@ class _InventoryViewState extends State<InventoryView> {
               _Stat('Stock bajo', '$low', Icons.warning_amber, low > 0 ? AppColors.red : Colors.blueGrey),
             ]),
           ),
+          if (!_offline) _WeeklyChart(key: ValueKey(_reload)),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
               onChanged: (v) => setState(() => _q = v),
               decoration: const InputDecoration(hintText: 'Buscar producto...', prefixIcon: Icon(Icons.search)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                FilterChip(
+                    label: const Text('Stock bajo'),
+                    selected: _filtro == 'bajo',
+                    onSelected: (v) => setState(() => _filtro = v ? 'bajo' : 'todos')),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _cat,
+                  underline: const SizedBox.shrink(),
+                  items: cats.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (v) => setState(() => _cat = v ?? 'Todas'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('A-Z'), selected: _orden == 'nombre', onSelected: (_) => setState(() => _orden = 'nombre')),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('Menor stock'), selected: _orden == 'stock', onSelected: (_) => setState(() => _orden = 'stock')),
+              ]),
             ),
           ),
           if (_offline)
@@ -436,7 +563,7 @@ class _ProductCard extends StatelessWidget {
   const _ProductCard(this.p, {required this.onTap, this.onLong});
   @override
   Widget build(BuildContext context) {
-    final low = p.stock <= 5;
+    final low = p.bajo;
     final color = low ? AppColors.red : AppColors.green;
     final sub = [p.marca, p.categoria].where((e) => e?.isNotEmpty ?? false).join(' · ');
     return Card(
@@ -534,38 +661,192 @@ class _MoveSheetState extends State<_MoveSheet> {
   }
 }
 
+// ---------------- GRÁFICA SEMANAL ----------------
+class _WeeklyChart extends StatefulWidget {
+  const _WeeklyChart({super.key});
+  @override
+  State<_WeeklyChart> createState() => _WeeklyChartState();
+}
+
+class _WeeklyChartState extends State<_WeeklyChart> {
+  List<dynamic>? _d;
+
+  @override
+  void initState() {
+    super.initState();
+    MovementRepository().weekly().then((v) {
+      if (mounted) setState(() => _d = v);
+    }).catchError((_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _d;
+    if (d == null || d.isEmpty) return const SizedBox.shrink();
+    var max = 1;
+    for (final e in d) {
+      final a = e['entradas'] as int, b = e['salidas'] as int;
+      if (a > max) max = a;
+      if (b > max) max = b;
+    }
+    Widget bar(int v, Color c) => Container(
+          width: 9,
+          height: 4 + 44.0 * v / max,
+          decoration: BoxDecoration(color: v == 0 ? c.withValues(alpha: 0.2) : c, borderRadius: BorderRadius.circular(3)),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text.rich(TextSpan(style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade500), children: const [
+              TextSpan(text: 'Últimos 7 días:  '),
+              TextSpan(text: '■ entradas  ', style: TextStyle(color: AppColors.green)),
+              TextSpan(text: '■ salidas', style: TextStyle(color: AppColors.red)),
+            ])),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: d
+                  .map<Widget>((e) => Expanded(
+                        child: Column(children: [
+                          Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            bar(e['entradas'] as int, AppColors.green),
+                            const SizedBox(width: 2),
+                            bar(e['salidas'] as int, AppColors.red),
+                          ]),
+                          Text('${e['fecha']}'.substring(8), style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400)),
+                        ]),
+                      ))
+                  .toList(),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------- MOVIMIENTOS ----------------
-class MovementsView extends StatelessWidget {
+class MovementsView extends StatefulWidget {
   const MovementsView({super.key});
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
-        future: MovementRepository().list(),
-        builder: (_, s) {
-          if (s.hasError) return _Empty('assets/mascota/sorprendido.png', '${s.error}');
-          if (!s.hasData) return const Center(child: CircularProgressIndicator());
-          if (s.data!.isEmpty) return const _Empty('assets/mascota/pose_app.png', 'Aún no hay movimientos');
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: s.data!.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              final m = s.data![i];
-              final entrada = m['tipo'] == 'entrada';
-              final color = entrada ? AppColors.green : AppColors.red;
-              final fecha = m['fecha'].toString().replaceFirst('T', ' ').substring(0, 16);
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                      backgroundColor: color.withValues(alpha: 0.12),
-                      child: Icon(entrada ? Icons.arrow_downward : Icons.arrow_upward, color: color)),
-                  title: Text('${m['producto']}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy)),
-                  subtitle: Text('${m['usuario']} · $fecha'),
-                  trailing: Text('${entrada ? '+' : '-'}${m['cantidad']}',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+  State<MovementsView> createState() => _MovementsViewState();
+}
+
+class _MovementsViewState extends State<MovementsView> {
+  final _repo = MovementRepository();
+  List<dynamic> _all = [];
+  bool _loading = true;
+  String? _error;
+  String _q = '', _tipo = 'todos';
+  DateTimeRange? _rango;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      _all = await _repo.list();
+    } catch (e) {
+      _error = '$e';
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _pickRange() async {
+    final now = DateTime.now();
+    final r = await showDateRangePicker(
+        context: context, firstDate: DateTime(now.year - 2), lastDate: now, initialDateRange: _rango);
+    if (r != null) setState(() => _rango = r);
+  }
+
+  bool _match(dynamic m) {
+    if (_tipo != 'todos' && m['tipo'] != _tipo) return false;
+    if (!'${m['producto']} ${m['usuario']}'.toLowerCase().contains(_q.toLowerCase())) return false;
+    if (_rango != null) {
+      final f = DateTime.tryParse('${m['fecha']}');
+      if (f == null) return false;
+      final fin = DateTime(_rango!.end.year, _rango!.end.month, _rango!.end.day, 23, 59, 59);
+      if (f.isBefore(_rango!.start) || f.isAfter(fin)) return false;
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _Empty('assets/mascota/sorprendido.png', _error!);
+    final list = _all.where(_match).toList();
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Row(children: [
+          Expanded(
+            child: TextField(
+              onChanged: (v) => setState(() => _q = v),
+              decoration: const InputDecoration(hintText: 'Buscar por producto o usuario...', prefixIcon: Icon(Icons.search)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filledTonal(icon: const Icon(Icons.date_range), tooltip: 'Filtrar por fechas', onPressed: _pickRange),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Row(children: [
+          Expanded(
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'todos', label: Text('Todos')),
+                ButtonSegment(value: 'entrada', label: Text('Entradas')),
+                ButtonSegment(value: 'salida', label: Text('Salidas')),
+              ],
+              selected: {_tipo},
+              onSelectionChanged: (s) => setState(() => _tipo = s.first),
+            ),
+          ),
+          if (_rango != null)
+            IconButton(icon: const Icon(Icons.close), tooltip: 'Quitar filtro de fechas', onPressed: () => setState(() => _rango = null)),
+        ]),
+      ),
+      Expanded(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: list.isEmpty
+              ? _Empty('assets/mascota/pose_app.png', _all.isEmpty ? 'Aún no hay movimientos' : 'Sin resultados con esos filtros')
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final m = list[i];
+                    final entrada = m['tipo'] == 'entrada';
+                    final color = entrada ? AppColors.green : AppColors.red;
+                    final fecha = m['fecha'].toString().replaceFirst('T', ' ').substring(0, 16);
+                    return Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                            backgroundColor: color.withValues(alpha: 0.12),
+                            child: Icon(entrada ? Icons.arrow_downward : Icons.arrow_upward, color: color)),
+                        title: Text('${m['producto']}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy)),
+                        subtitle: Text('${m['usuario']} · $fecha'),
+                        trailing: Text('${entrada ? '+' : '-'}${m['cantidad']}',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          );
-        },
-      );
+        ),
+      ),
+    ]);
+  }
 }
