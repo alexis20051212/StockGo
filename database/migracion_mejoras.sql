@@ -1,5 +1,5 @@
 -- Ejecutar UNA vez en la base existente (Aiven) ANTES de desplegar la nueva versión del backend.
-USE defaultdb;  -- en Aiven la base se llama defaultdb; en local, usa: USE stockgo;
+USE stockgo;  -- base de datos de StockGo (en Aiven también se llama stockgo)
 ALTER TABLE productos ADD COLUMN stock_minimo INT NOT NULL DEFAULT 5;
 CREATE TABLE IF NOT EXISTS auditoria (
   id INT AUTO_INCREMENT PRIMARY KEY,
