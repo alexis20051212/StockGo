@@ -49,7 +49,9 @@ sube al repositorio** (está en `.gitignore`); solo se incluye `.env.example`, s
 | `DB_USER`, `DB_PASSWORD` | Credenciales de MySQL |
 | `DB_NAME` | Nombre de la base de datos |
 | `DB_SSL` | `true` para bases en la nube que exigen SSL |
-| `DB_SSL_CA` | Archivo del certificado de la autoridad (por ejemplo `ca.pem`) |
+| `DB_SSL_CA` | Archivo del certificado de la autoridad (por ejemplo `ca.pem`, se coloca en `backend/`). Con él se **verifica** el certificado del servidor; sin él se omite la verificación y el log muestra un aviso |
+| `LOGIN_MAX_ATTEMPTS` | Intentos fallidos de inicio de sesión antes de bloquear (por defecto 5) |
+| `LOGIN_LOCK_SECONDS` | Segundos de bloqueo (por defecto 300) |
 
 ### 4. App móvil
 ```
@@ -77,10 +79,11 @@ Las mismas pruebas se ejecutan en GitHub Actions (`.github/workflows/ci.yml`) en
 **Terminadas:** inicio de sesión con JWT, roles y restricciones, consulta de inventario, alta de
 productos (manual y con código de barras), registro de entradas y salidas, historial de
 movimientos, administración de usuarios, validación de contraseñas, consulta a Open Food Facts,
-despliegue en la nube y pruebas automatizadas.
+límite de intentos de inicio de sesión, despliegue en la nube y pruebas automatizadas
+(autenticación, roles, movimientos de inventario y errores de Open Food Facts).
 
-**Pendientes:** pantalla para editar productos (el endpoint ya existe), pantalla de perfil, límite
-de intentos de inicio de sesión, caché sin conexión, APK firmado de producción y atribución a
+**Pendientes:** pantalla para editar productos (el endpoint ya existe), pantalla de perfil,
+caché sin conexión, APK firmado de producción y atribución a
 Open Food Facts en la interfaz.
 
 ## Estructura

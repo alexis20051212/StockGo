@@ -1,4 +1,4 @@
-import os, functools, datetime, string
+import os, functools, datetime, string, time
 import jwt, requests, mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, g
@@ -18,7 +18,10 @@ def conn():
         ca = os.getenv("DB_SSL_CA")
         if ca:
             cfg["ssl_ca"] = os.path.join(os.path.dirname(__file__), ca)
+            cfg["ssl_verify_cert"] = True  # con CA propia el certificado sí se verifica
         else:
+            # Sin CA no se puede verificar el certificado del servidor: configura DB_SSL_CA en producción
+            print("AVISO: DB_SSL_CA no configurado; el certificado SSL de la base NO se verifica", flush=True)
             cfg["ssl_verify_cert"] = False
     return mysql.connector.connect(**cfg)
 
@@ -116,12 +119,49 @@ def register():
     return jsonify(id=uid), 201
 
 
+# Límite de intentos de inicio de sesión (en memoria, por IP + correo)
+MAX_INTENTOS = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
+BLOQUEO_SEG = int(os.getenv("LOGIN_LOCK_SECONDS", "300"))
+_intentos = {}  # clave -> {"n": fallos, "hasta": instante de desbloqueo}
+
+
+def _clave_login(email):
+    ip = (request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()
+    return f"{ip}|{(email or '').strip().lower()}"
+
+
+def _segundos_bloqueo(clave, ahora=None):
+    reg = _intentos.get(clave)
+    ahora = ahora if ahora is not None else time.time()
+    if reg and reg["hasta"] > ahora:
+        return int(reg["hasta"] - ahora) + 1
+    return 0
+
+
+def _registrar_fallo(clave):
+    reg = _intentos.setdefault(clave, {"n": 0, "hasta": 0})
+    if reg["hasta"] and reg["hasta"] <= time.time():  # el bloqueo anterior ya venció
+        reg["n"], reg["hasta"] = 0, 0
+    reg["n"] += 1
+    if reg["n"] >= MAX_INTENTOS:
+        reg["hasta"] = time.time() + BLOQUEO_SEG
+        reg["n"] = 0
+
+
 @app.post("/auth/login")
 def login():
     d = request.get_json(silent=True) or {}
+    clave = _clave_login(d.get("email"))
+    espera = _segundos_bloqueo(clave)
+    if espera:
+        resp = jsonify(error=f"Demasiados intentos fallidos. Intenta de nuevo en {espera} segundos.")
+        resp.headers["Retry-After"] = str(espera)
+        return resp, 429
     u = query("SELECT * FROM usuarios WHERE email=%s AND activo=1", (d.get("email"),), one=True)
     if not u or not check_password_hash(u["password_hash"], d.get("password", "")):
+        _registrar_fallo(clave)
         return jsonify(error="Credenciales incorrectas"), 401
+    _intentos.pop(clave, None)
     return jsonify(token=make_token(u), rol=u["rol"], nombre=u["nombre"])
 
 
