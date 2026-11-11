@@ -100,7 +100,7 @@ class _InventoryViewState extends State<InventoryView> {
   final _products = ProductRepository(), _moves = MovementRepository();
   List<Product> _all = [];
   String _q = '';
-  bool _loading = true;
+  bool _loading = true, _offline = false;
   String? _error;
 
   @override
@@ -116,6 +116,7 @@ class _InventoryViewState extends State<InventoryView> {
     });
     try {
       _all = await _products.list();
+      _offline = _products.fromCache;
     } catch (e) {
       _error = '$e';
     }
@@ -181,6 +182,71 @@ class _InventoryViewState extends State<InventoryView> {
     if (r != null) apply(r);
   }
 
+  Future<void> _actions(Product p) async {
+    final op = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(p.nombre, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+          ),
+          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Editar producto'), onTap: () => Navigator.pop(ctx, 'editar')),
+          ListTile(leading: const Icon(Icons.delete_outline, color: AppColors.red), title: const Text('Eliminar producto'), onTap: () => Navigator.pop(ctx, 'eliminar')),
+        ]),
+      ),
+    );
+    if (op == 'editar') await _editProduct(p);
+    if (op == 'eliminar') await _confirmDelete(p);
+  }
+
+  Future<void> _editProduct(Product p) async {
+    final nombre = TextEditingController(text: p.nombre),
+        marca = TextEditingController(text: p.marca ?? ''),
+        cat = TextEditingController(text: p.categoria ?? '');
+    await showDialog(
+      context: context,
+      builder: (ctx) => PeekingDialog(
+        title: const Text('Editar producto'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nombre, decoration: const InputDecoration(labelText: 'Nombre')),
+            const SizedBox(height: 10),
+            TextField(controller: marca, decoration: const InputDecoration(labelText: 'Marca')),
+            const SizedBox(height: 10),
+            TextField(controller: cat, decoration: const InputDecoration(labelText: 'Categoría')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(100, 44)),
+            onPressed: () async {
+              if (nombre.text.trim().isEmpty) {
+                _toast(context, 'El nombre es obligatorio');
+                return;
+              }
+              try {
+                await _products.update(p.id, {
+                  'nombre': nombre.text.trim(), 'marca': marca.text.trim(),
+                  'categoria': cat.text.trim(), 'imagen_url': p.imagenUrl,
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) _toast(context, 'Producto actualizado', error: false);
+                _load();
+              } catch (e) {
+                if (mounted) _toast(context, '$e');
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _addProduct() async {
     final code = TextEditingController(), nombre = TextEditingController(),
         marca = TextEditingController(), cat = TextEditingController();
@@ -240,6 +306,10 @@ class _InventoryViewState extends State<InventoryView> {
               TextField(controller: marca, decoration: const InputDecoration(labelText: 'Marca')),
               const SizedBox(height: 10),
               TextField(controller: cat, decoration: const InputDecoration(labelText: 'Categoría')),
+              const SizedBox(height: 12),
+              Text('Datos de producto: Open Food Facts (licencia ODbL)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade400)),
             ]),
           ),
           actions: [
@@ -300,6 +370,20 @@ class _InventoryViewState extends State<InventoryView> {
               decoration: const InputDecoration(hintText: 'Buscar producto...', prefixIcon: Icon(Icons.search)),
             ),
           ),
+          if (_offline)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFFFF3D6), borderRadius: BorderRadius.circular(12)),
+              child: const Row(children: [
+                Icon(Icons.cloud_off, size: 18, color: Color(0xFF8A5A00)),
+                SizedBox(width: 8),
+                Expanded(
+                    child: Text('Sin conexión: mostrando el último inventario guardado. Desliza para reintentar.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF8A5A00)))),
+              ]),
+            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -314,7 +398,7 @@ class _InventoryViewState extends State<InventoryView> {
                             itemBuilder: (_, i) => _ProductCard(
                               list[i],
                               onTap: () => _move(list[i]),
-                              onLong: widget.isAdmin ? () => _confirmDelete(list[i]) : null,
+                              onLong: widget.isAdmin ? () => _actions(list[i]) : null,
                             ),
                           ),
           ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../core/api_client.dart';
 
 /// REPOSITORY PATTERN: las pantallas nunca hablan HTTP directamente.
@@ -40,10 +41,29 @@ class AuthRepository {
 class ProductRepository {
   final _api = ApiClient();
 
-  Future<List<Product>> list() async =>
-      (await _api.request('GET', '/products') as List).map((j) => Product.fromJson(j)).toList();
+  /// true si la última lista salió de la caché local (sin conexión).
+  bool fromCache = false;
+
+  Future<List<Product>> list() async {
+    try {
+      final raw = await _api.request('GET', '/products') as List;
+      await _api.saveCache('products', jsonEncode(raw));
+      fromCache = false;
+      return raw.map((j) => Product.fromJson(j)).toList();
+    } on ApiException catch (e) {
+      if (e.tipo == ApiError.sinConexion || e.tipo == ApiError.tiempoAgotado) {
+        final c = await _api.readCache('products');
+        if (c != null) {
+          fromCache = true;
+          return (jsonDecode(c) as List).map((j) => Product.fromJson(j)).toList();
+        }
+      }
+      rethrow;
+    }
+  }
 
   Future<void> create(Map<String, dynamic> data) => _api.request('POST', '/products', body: data);
+  Future<void> update(int id, Map<String, dynamic> data) => _api.request('PUT', '/products/$id', body: data);
   Future<void> delete(int id) => _api.request('DELETE', '/products/$id');
 
   /// Consulta Open Food Facts a través del backend.
@@ -57,7 +77,19 @@ class MovementRepository {
   Future<void> register(int productId, String tipo, int cantidad) => _api.request('POST', '/movements',
       body: {'product_id': productId, 'tipo': tipo, 'cantidad': cantidad});
 
-  Future<List<dynamic>> list() async => await _api.request('GET', '/movements');
+  Future<List<dynamic>> list() async {
+    try {
+      final raw = await _api.request('GET', '/movements') as List;
+      await _api.saveCache('movements', jsonEncode(raw));
+      return raw;
+    } on ApiException catch (e) {
+      if (e.tipo == ApiError.sinConexion || e.tipo == ApiError.tiempoAgotado) {
+        final c = await _api.readCache('movements');
+        if (c != null) return jsonDecode(c) as List;
+      }
+      rethrow;
+    }
+  }
 }
 
 class UserItem {

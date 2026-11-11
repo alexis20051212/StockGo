@@ -10,6 +10,7 @@ enum ApiError {
   tiempoAgotado,
   noAutorizado,
   noEncontrado,
+  limiteExcedido,
   servidor,
   respuestaInvalida,
   otro,
@@ -51,7 +52,11 @@ class ApiClient {
   Future<String?> get token => _storage.read(key: 'token');
   Future<String?> get rol => _storage.read(key: 'rol');
   Future<String?> get nombre => _storage.read(key: 'nombre');
-  Future<void> clearSession() => _storage.deleteAll();
+  Future<void> clearSession() => _storage.deleteAll(); // también borra la caché local
+
+  /// Caché local para mostrar el último inventario cuando no hay conexión.
+  Future<void> saveCache(String key, String value) => _storage.write(key: 'cache_$key', value: value);
+  Future<String?> readCache(String key) => _storage.read(key: 'cache_$key');
 
   Future<dynamic> request(String method, String path,
       {Map<String, dynamic>? body}) async {
@@ -117,6 +122,13 @@ class ApiClient {
           msg ?? 'Error del servidor (${res.statusCode}). Intenta más tarde.',
           res.statusCode,
           ApiError.servidor);
+    }
+    if (res.statusCode == 429) {
+      // Demasiados intentos de login o límite de Open Food Facts
+      throw ApiException(
+          msg ?? 'Demasiadas solicitudes. Espera un momento e intenta de nuevo.',
+          429,
+          ApiError.limiteExcedido);
     }
     if (res.statusCode >= 400) {
       throw ApiException(msg ?? 'No se pudo completar la solicitud.',
