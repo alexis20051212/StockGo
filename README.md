@@ -52,6 +52,7 @@ sube al repositorio** (está en `.gitignore`); solo se incluye `.env.example`, s
 | `DB_SSL_CA` | Archivo del certificado de la autoridad (por ejemplo `ca.pem`, se coloca en `backend/`). Con él se **verifica** el certificado del servidor; sin él se omite la verificación y el log muestra un aviso |
 | `LOGIN_MAX_ATTEMPTS` | Intentos fallidos de inicio de sesión antes de bloquear (por defecto 5) |
 | `LOGIN_LOCK_SECONDS` | Segundos de bloqueo (por defecto 300) |
+| `OFF_CACHE_SECONDS` | Tiempo de caché de consultas a Open Food Facts (por defecto 86400) |
 
 ### 4. App móvil
 ```
@@ -75,16 +76,22 @@ pytest tests -v
 ```
 Las mismas pruebas se ejecutan en GitHub Actions (`.github/workflows/ci.yml`) en cada `push`.
 
-## Estado de las funcionalidades
-**Terminadas:** inicio de sesión con JWT, roles y restricciones, consulta de inventario, alta de
-productos (manual y con código de barras), registro de entradas y salidas, historial de
-movimientos, administración de usuarios, validación de contraseñas, consulta a Open Food Facts,
-límite de intentos de inicio de sesión, despliegue en la nube y pruebas automatizadas
-(autenticación, roles, movimientos de inventario y errores de Open Food Facts).
+## Actualización de la base de datos
+Si ya tienes una base creada, ejecuta **una vez** `database/migracion_mejoras.sql` (agrega `stock_minimo` y la tabla
+`auditoria`) **antes** de desplegar esta versión del backend.
 
-**Pendientes:** pantalla para editar productos (el endpoint ya existe), pantalla de perfil,
-caché sin conexión, APK firmado de producción y atribución a
-Open Food Facts en la interfaz.
+## Estado de las funcionalidades
+**Terminadas:** inicio de sesión con JWT, roles y restricciones, límite de intentos de inicio de sesión,
+inventario con búsqueda, filtros (stock bajo, categoría) y orden, stock mínimo configurable por producto,
+alta (manual, con código de barras o con código interno), edición y baja de productos, entradas y salidas con
+historial filtrable (texto, tipo y fechas), gráfica de los últimos 7 días, administración de usuarios,
+perfil (nombre y contraseña), registro de acciones del administrador, exportación del inventario a CSV,
+caché del último inventario y cola de movimientos sin conexión, consulta a Open Food Facts con caché y
+atribución, despliegue en la nube y pruebas automatizadas.
+
+**Pendientes:** foto del producto con la cámara (requiere almacenamiento de imágenes), APK firmado con clave
+propia (ver `docs/firmar_apk.md`), configuración de `ca.pem` en producción y validación en dispositivo de las
+funciones nuevas.
 
 ## Estructura
 ```

@@ -17,6 +17,7 @@ CREATE TABLE productos (
   categoria VARCHAR(100),
   imagen_url VARCHAR(400),
   stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  stock_minimo INT NOT NULL DEFAULT 5 CHECK (stock_minimo >= 0),
   activo TINYINT(1) NOT NULL DEFAULT 1
 );
 -- Movimientos: solo INSERT (inmutables, RF17)
@@ -28,5 +29,15 @@ CREATE TABLE movimientos (
   cantidad INT NOT NULL CHECK (cantidad > 0),
   fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (producto_id) REFERENCES productos(id),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+-- Bitácora de acciones del administrador
+CREATE TABLE auditoria (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  accion VARCHAR(30) NOT NULL,
+  entidad VARCHAR(30) NOT NULL,
+  detalle VARCHAR(250),
+  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );

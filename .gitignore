@@ -4,7 +4,4 @@ build/
 .dart_tool/
 *.jks
 key.properties
-venv/
-.idea/
-*.iml
-mobile/build/
+*.keystore

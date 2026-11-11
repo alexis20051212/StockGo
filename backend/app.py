@@ -1,7 +1,7 @@
-import os, functools, datetime, string, time
+import os, functools, datetime, string, time, csv, io
 import jwt, requests, mysql.connector
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
@@ -37,6 +37,15 @@ def query(sql, params=(), one=False, write=False):
         return (rows[0] if rows else None) if one else rows
     finally:
         cur.close(); con.close()
+
+
+def audit(accion, entidad, detalle=""):
+    """Bitácora de acciones del administrador. Un fallo aquí nunca debe romper la operación."""
+    try:
+        query("INSERT INTO auditoria(usuario_id,accion,entidad,detalle) VALUES(%s,%s,%s,%s)",
+              (g.user["id"], accion, entidad, str(detalle)[:250]), write=True)
+    except Exception as e:  # noqa: BLE001
+        print("AVISO: no se pudo registrar la auditoría:", e, flush=True)
 
 
 def auth(roles=None):
@@ -182,11 +191,41 @@ def update_me():
     return jsonify(ok=True)
 
 
+@app.put("/me/password")
+@auth()
+def change_my_password():
+    d = request.get_json(silent=True) or {}
+    if need(d, "actual", "nueva"):
+        return jsonify(error="Escribe tu contraseña actual y la nueva"), 400
+    u = query("SELECT password_hash FROM usuarios WHERE id=%s", (g.user["id"],), one=True)
+    if not u or not check_password_hash(u["password_hash"], d["actual"]):
+        return jsonify(error="La contraseña actual es incorrecta"), 400
+    err = validar_password(d["nueva"])
+    if err:
+        return jsonify(error=err), 400
+    query("UPDATE usuarios SET password_hash=%s WHERE id=%s",
+          (generate_password_hash(d["nueva"]), g.user["id"]), write=True)
+    return jsonify(ok=True)
+
+
 # ---------- PRODUCTOS ----------
 @app.get("/products")
 @auth()
 def products():
     return jsonify(query("SELECT * FROM productos WHERE activo=1 ORDER BY nombre"))
+
+
+def _stock_minimo(valor, defecto):
+    """Convierte y valida el stock mínimo (entero >= 0). Devuelve (valor, error)."""
+    if valor in (None, ""):
+        return defecto, None
+    try:
+        n = int(valor)
+    except (ValueError, TypeError):
+        return None, "El stock mínimo debe ser un número entero"
+    if n < 0:
+        return None, "El stock mínimo no puede ser negativo"
+    return n, None
 
 
 @app.post("/products")
@@ -195,11 +234,15 @@ def create_product():
     d = request.get_json(silent=True) or {}
     if need(d, "nombre"):
         return jsonify(error="Nombre requerido"), 400
+    minimo, err = _stock_minimo(d.get("stock_minimo"), 5)
+    if err:
+        return jsonify(error=err), 400
     try:
-        pid = query("INSERT INTO productos(codigo_barras,nombre,marca,categoria,imagen_url) VALUES(%s,%s,%s,%s,%s)",
-                    (d.get("codigo_barras") or None, d["nombre"], d.get("marca"), d.get("categoria"), d.get("imagen_url")), write=True)
+        pid = query("INSERT INTO productos(codigo_barras,nombre,marca,categoria,imagen_url,stock_minimo) VALUES(%s,%s,%s,%s,%s,%s)",
+                    (d.get("codigo_barras") or None, d["nombre"], d.get("marca"), d.get("categoria"), d.get("imagen_url"), minimo), write=True)
     except mysql.connector.IntegrityError:
         return jsonify(error="Ya existe un producto con ese código de barras"), 409
+    audit("crear", "producto", f"id={pid} {d['nombre']}")
     return jsonify(id=pid), 201
 
 
@@ -209,8 +252,12 @@ def update_product(pid):
     d = request.get_json(silent=True) or {}
     if need(d, "nombre"):
         return jsonify(error="Nombre requerido"), 400
-    query("UPDATE productos SET nombre=%s,marca=%s,categoria=%s,imagen_url=%s WHERE id=%s",
-          (d["nombre"], d.get("marca"), d.get("categoria"), d.get("imagen_url"), pid), write=True)
+    minimo, err = _stock_minimo(d.get("stock_minimo"), None)  # None = conservar el actual
+    if err:
+        return jsonify(error=err), 400
+    query("UPDATE productos SET nombre=%s,marca=%s,categoria=%s,imagen_url=%s,stock_minimo=COALESCE(%s,stock_minimo) WHERE id=%s",
+          (d["nombre"], d.get("marca"), d.get("categoria"), d.get("imagen_url"), minimo, pid), write=True)
+    audit("editar", "producto", f"id={pid} {d['nombre']}")
     return jsonify(ok=True)
 
 
@@ -218,7 +265,29 @@ def update_product(pid):
 @auth(["admin"])
 def delete_product(pid):  # baja lógica: conserva el historial
     query("UPDATE productos SET activo=0 WHERE id=%s", (pid,), write=True)
+    audit("eliminar", "producto", f"id={pid}")
     return jsonify(ok=True)
+
+
+def _csv_seguro(v):
+    """Evita inyección de fórmulas al abrir el CSV en Excel."""
+    t = "" if v is None else str(v)
+    return "'" + t if t[:1] in ("=", "+", "-", "@") else t
+
+
+@app.get("/products/export.csv")
+@auth(["admin"])
+def export_products():
+    rows = query("SELECT codigo_barras,nombre,marca,categoria,stock,stock_minimo FROM productos WHERE activo=1 ORDER BY nombre")
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["codigo_barras", "nombre", "marca", "categoria", "stock", "stock_minimo"])
+    for r in rows:
+        w.writerow([_csv_seguro(r["codigo_barras"]), _csv_seguro(r["nombre"]), _csv_seguro(r["marca"]),
+                    _csv_seguro(r["categoria"]), r["stock"], r["stock_minimo"]])
+    audit("exportar", "inventario", f"{len(rows)} productos")
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=inventario.csv"})
 
 
 # ---------- MOVIMIENTOS ----------
@@ -261,6 +330,30 @@ def movements():
     return jsonify([{**r, "fecha": r["fecha"].isoformat()} for r in rows])
 
 
+@app.get("/stats/weekly")
+@auth()
+def stats_weekly():
+    """Entradas y salidas de los últimos 7 días (para la gráfica de inicio)."""
+    rows = query("""SELECT DATE(fecha) AS dia, tipo, SUM(cantidad) AS total FROM movimientos
+        WHERE fecha >= (CURRENT_DATE - INTERVAL 6 DAY) GROUP BY DATE(fecha), tipo""")
+    hoy = datetime.date.today()
+    dias = {(hoy - datetime.timedelta(days=i)).isoformat(): {"fecha": (hoy - datetime.timedelta(days=i)).isoformat(),
+            "entradas": 0, "salidas": 0} for i in range(6, -1, -1)}
+    for r in rows:
+        k = r["dia"].isoformat() if hasattr(r["dia"], "isoformat") else str(r["dia"])
+        if k in dias:
+            dias[k]["entradas" if r["tipo"] == "entrada" else "salidas"] = int(r["total"])
+    return jsonify(list(dias.values()))
+
+
+@app.get("/audit")
+@auth(["admin"])
+def audit_log():
+    rows = query("""SELECT a.id,a.accion,a.entidad,a.detalle,a.fecha,u.nombre AS usuario
+        FROM auditoria a JOIN usuarios u ON u.id=a.usuario_id ORDER BY a.fecha DESC LIMIT 100""")
+    return jsonify([{**r, "fecha": r["fecha"].isoformat()} for r in rows])
+
+
 # ---------- USUARIOS (solo administrador) ----------
 @app.get("/users")
 @auth(["admin"])
@@ -285,6 +378,7 @@ def create_user():
                      d.get("rol", "empleado")), write=True)
     except mysql.connector.IntegrityError:
         return jsonify(error="Ya existe un usuario con ese correo"), 409
+    audit("crear", "usuario", f"id={uid} {d.get('rol', 'empleado')}")
     return jsonify(id=uid), 201
 
 
@@ -309,12 +403,15 @@ def update_user(uid):
         sets.append("password_hash=%s")
         params.append(generate_password_hash(d["password"]))
     query("UPDATE usuarios SET " + ", ".join(sets) + " WHERE id=%s", (*params, uid), write=True)
+    audit("editar", "usuario", f"id={uid} rol={rol} activo={activo}" + (" +contraseña" if d.get("password") else ""))
     return jsonify(ok=True)
 
 
 # ---------- API EXTERNA: Open Food Facts ----------
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
 OFF_FIELDS = "code,product_name,brands,categories,image_front_url"
+OFF_TTL = int(os.getenv("OFF_CACHE_SECONDS", "86400"))  # caché de consultas repetidas
+_off_cache = {}  # código -> (instante, respuesta)
 
 
 @app.get("/barcode/<code>")
@@ -323,6 +420,9 @@ def barcode(code):
     """Consulta un producto por código de barras en Open Food Facts."""
     if not code.isdigit() or not 8 <= len(code) <= 14:
         return jsonify(error="Código de barras inválido"), 400
+    hit = _off_cache.get(code)
+    if hit and time.time() - hit[0] < OFF_TTL:  # no gasta el límite de 15 consultas por minuto
+        return jsonify(hit[1])
     try:
         r = requests.get(
             OFF_URL.format(code),
@@ -345,13 +445,15 @@ def barcode(code):
         return jsonify(error="Producto no encontrado en Open Food Facts"), 404
     p = data["product"]
     categoria = (p.get("categories") or "").split(",")[0].strip()
-    return jsonify(
+    resultado = dict(
         codigo_barras=code,
         nombre=p.get("product_name", ""),
         marca=p.get("brands", ""),
         categoria=categoria,
         imagen_url=p.get("image_front_url", ""),
     )
+    _off_cache[code] = (time.time(), resultado)
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":
