@@ -5,3 +5,5 @@ build/
 *.jks
 key.properties
 *.keystore
+
+*.iml
