@@ -40,7 +40,16 @@ ThemeData buildTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
-      indicatorColor: AppColors.blue.withValues(alpha: 0.12),
+      elevation: 8,
+      height: 68,
+      indicatorColor: AppColors.blue.withValues(alpha: 0.16),
+      labelTextStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: BorderSide(color: Colors.blueGrey.shade100),
+      selectedColor: AppColors.blue.withValues(alpha: 0.18),
+      backgroundColor: Colors.white,
     ),
   );
 }

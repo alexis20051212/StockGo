@@ -88,25 +88,127 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String get _inicial => _nombre.isNotEmpty ? _nombre[0].toUpperCase() : '?';
+
+  /// Hoja "Mi cuenta": perfil, exportar, registro de acciones y cerrar sesión.
+  Future<void> _accountSheet() async {
+    final op = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) {
+        Widget tile(IconData icon, String title, String sub, String value, {Color? color}) {
+          final c = color ?? AppColors.blue;
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, color: c),
+            ),
+            title: Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color ?? AppColors.navy)),
+            subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
+            trailing: Icon(Icons.chevron_right, color: Colors.blueGrey.shade300),
+            onTap: () => Navigator.pop(ctx, value),
+          );
+        }
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.navy,
+                    child: Text(_inicial, style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_nombre, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                        child: Text(_isAdmin ? 'Administrador' : 'Empleado',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy)),
+                      ),
+                    ]),
+                  ),
+                ]),
+              ),
+              const Divider(height: 1),
+              tile(Icons.person_outline, 'Mi perfil', 'Cambiar nombre y contraseña', 'perfil'),
+              if (_isAdmin) tile(Icons.download_outlined, 'Exportar inventario', 'Copiar el inventario en formato CSV', 'export'),
+              if (_isAdmin) tile(Icons.history, 'Registro de acciones', 'Quién creó, editó o eliminó', 'audit'),
+              const Divider(height: 1),
+              tile(Icons.logout, 'Cerrar sesión', 'Salir de tu cuenta', 'logout', color: AppColors.red),
+              const SizedBox(height: 12),
+            ]),
+          ),
+        );
+      },
+    );
+    if (op != null) await _menu(op);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          toolbarHeight: 68,
-          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('StockGo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
-            Text('Hola, $_nombre · ${_isAdmin ? 'Administrador' : 'Empleado'}',
-                style: const TextStyle(fontSize: 12, color: Colors.white70)),
+          toolbarHeight: 78,
+          titleSpacing: 16,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0B2E6B), Color(0xFF0A62B8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          title: Row(children: [
+            Image.asset('assets/mascota/pose_app.png', height: 48),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('StockGo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+                Text('Hola, $_nombre', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: Colors.white70)),
+              ]),
+            ),
           ]),
           actions: [
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: _menu,
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'perfil', child: Text('Mi perfil')),
-                if (_isAdmin) const PopupMenuItem(value: 'export', child: Text('Exportar inventario (CSV)')),
-                if (_isAdmin) const PopupMenuItem(value: 'audit', child: Text('Registro de acciones')),
-                const PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
-              ],
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Tooltip(
+                message: 'Mi cuenta',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: _accountSheet,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(5, 5, 10, 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      CircleAvatar(
+                        radius: 17,
+                        backgroundColor: Colors.white,
+                        child: Text(_inicial, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 17)),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('Cuenta', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                      const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
+                    ]),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -449,6 +551,7 @@ class _InventoryViewState extends State<InventoryView> {
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.blue,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               onPressed: _addProduct,
               icon: const Icon(Icons.add),
               label: const Text('Producto'))
@@ -542,16 +645,24 @@ class _Stat extends StatelessWidget {
   const _Stat(this.label, this.value, this.icon, this.color);
   @override
   Widget build(BuildContext context) => Expanded(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(height: 6),
-              Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
-              Text(label, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade500)),
-            ]),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.18)),
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4))],
           ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: color)),
+            Text(label, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade500)),
+          ]),
         ),
       );
 }
@@ -567,8 +678,14 @@ class _ProductCard extends StatelessWidget {
     final color = low ? AppColors.red : AppColors.green;
     final sub = [p.marca, p.categoria].where((e) => e?.isNotEmpty ?? false).join(' · ');
     return Card(
+      elevation: 2,
+      shadowColor: Colors.black12,
+      color: low ? const Color(0xFFFFF7F7) : Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: low ? AppColors.red.withValues(alpha: 0.3) : Colors.blueGrey.shade50)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         onLongPress: onLong,
         child: Padding(
@@ -577,8 +694,8 @@ class _ProductCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                width: 60,
-                height: 60,
+                width: 68,
+                height: 68,
                 color: AppColors.bg,
                 child: p.imagenUrl != null && p.imagenUrl!.isNotEmpty
                     ? Image.network(p.imagenUrl!, fit: BoxFit.cover,
@@ -598,11 +715,11 @@ class _ProductCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
               child: Column(children: [
                 Text('${p.stock}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
-                Text(low ? 'Bajo' : 'En stock', style: TextStyle(fontSize: 10, color: color)),
+                Text(low ? 'Stock bajo' : 'unidades', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
               ]),
             ),
           ]),
