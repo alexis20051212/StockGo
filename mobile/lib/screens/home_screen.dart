@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/notifications.dart';
 import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import 'audit_screen.dart';
@@ -36,6 +37,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = AuthRepository();
     auth.role().then((r) => setState(() => _isAdmin = r == 'admin'));
     auth.name().then((n) => setState(() => _nombre = n ?? ''));
+    NotificationService.instance.onNueva = (n) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${n.titulo}: ${n.detalle}'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: n.tipo == NotifTipo.nuevoProducto ? AppColors.green : AppColors.red,
+        action: SnackBarAction(label: 'Ver', textColor: Colors.white, onPressed: () => showNotifSheet(context)),
+      ));
+    };
   }
 
   Future<void> _logout() async {
@@ -55,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (ok != true) return;
     }
     await AuthRepository().logout();
+    NotificationService.instance.reset();
     if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
@@ -182,8 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ]),
           actions: [
+            const NotifBell(),
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: 12, left: 4),
               child: Tooltip(
                 message: 'Mi cuenta',
                 child: InkWell(
@@ -284,6 +296,7 @@ class _InventoryViewState extends State<InventoryView> {
     try {
       _all = await _products.list();
       _offline = _products.fromCache;
+      if (!_offline) await NotificationService.instance.sync(_all);
     } catch (e) {
       _error = '$e';
     }
