@@ -168,7 +168,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    // Responsivo: en pantallas anchas (PC/tablet) el menú pasa a un lateral y el contenido se centra.
+    final ancho = MediaQuery.of(context).size.width;
+    final wide = ancho >= 900;
+    final destinos = [
+      (Icons.inventory_2_outlined, Icons.inventory_2, 'Inventario'),
+      (Icons.swap_vert, Icons.swap_vert_circle, 'Movimientos'),
+      if (_isAdmin) (Icons.group_outlined, Icons.group, 'Usuarios'),
+    ];
+    final pagina = _tab == 0
+        ? InventoryView(isAdmin: _isAdmin)
+        : _tab == 1
+            ? const MovementsView()
+            : const UsersView();
+    return Scaffold(
         appBar: AppBar(
           toolbarHeight: 78,
           titleSpacing: 16,
@@ -224,22 +238,43 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        body: _tab == 0
-            ? InventoryView(isAdmin: _isAdmin)
-            : _tab == 1
-                ? const MovementsView()
-                : const UsersView(),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: [
-            const NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Inventario'),
-            const NavigationDestination(icon: Icon(Icons.swap_vert), selectedIcon: Icon(Icons.swap_vert_circle), label: 'Movimientos'),
-            if (_isAdmin)
-              const NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group), label: 'Usuarios'),
+        body: Row(children: [
+          if (wide) ...[
+            NavigationRail(
+              selectedIndex: _tab.clamp(0, destinos.length - 1),
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              extended: ancho >= 1200,
+              backgroundColor: Colors.white,
+              indicatorColor: AppColors.blue.withValues(alpha: 0.16),
+              labelType: ancho >= 1200 ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+              destinations: [
+                for (final d in destinos)
+                  NavigationRailDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: Text(d.$3)),
+              ],
+            ),
+            const VerticalDivider(width: 1),
           ],
-        ),
-      );
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: _tab == 0 ? 1200 : 860),
+                child: pagina,
+              ),
+            ),
+          ),
+        ]),
+        bottomNavigationBar: wide
+            ? null
+            : NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (i) => setState(() => _tab = i),
+                destinations: [
+                  for (final d in destinos)
+                    NavigationDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: d.$3),
+                ],
+              ),
+    );
+  }
 }
 
 class _Empty extends StatelessWidget {
@@ -634,16 +669,29 @@ class _InventoryViewState extends State<InventoryView> {
                     ? _Empty('assets/mascota/sorprendido.png', _error!)
                     : list.isEmpty
                         ? _Empty('assets/mascota/pose_caja.png', _q.isEmpty ? 'Aún no hay productos. ¡Agrega el primero!' : 'Sin resultados')
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-                            itemCount: list.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
-                            itemBuilder: (_, i) => _ProductCard(
-                              list[i],
-                              onTap: () => _move(list[i]),
-                              onLong: widget.isAdmin ? () => _actions(list[i]) : null,
-                            ),
-                          ),
+                        : LayoutBuilder(builder: (ctx, c) {
+                            Widget card(int i) => _ProductCard(
+                                  list[i],
+                                  onTap: () => _move(list[i]),
+                                  onLong: widget.isAdmin ? () => _actions(list[i]) : null,
+                                );
+                            // Pantalla ancha: cuadrícula de 2 o más columnas; teléfono: lista
+                            if (c.maxWidth >= 700) {
+                              return GridView.builder(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+                                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 440, mainAxisExtent: 100, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                                itemCount: list.length,
+                                itemBuilder: (_, i) => card(i),
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+                              itemCount: list.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 10),
+                              itemBuilder: (_, i) => card(i),
+                            );
+                          }),
           ),
         ]),
       ),
