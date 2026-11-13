@@ -52,7 +52,21 @@ class ApiClient {
   Future<String?> get token => _storage.read(key: 'token');
   Future<String?> get rol => _storage.read(key: 'rol');
   Future<String?> get nombre => _storage.read(key: 'nombre');
-  Future<void> clearSession() => _storage.deleteAll(); // también borra la caché local
+  /// Cierra sesión y borra la caché local, pero conserva las preferencias
+  /// del login ('pref_*') y las credenciales de la huella ('bio_*').
+  Future<void> clearSession() async {
+    final todo = await _storage.readAll();
+    await _storage.deleteAll();
+    for (final e in todo.entries) {
+      if (e.key.startsWith('pref_') || e.key.startsWith('bio_')) {
+        await _storage.write(key: e.key, value: e.value);
+      }
+    }
+  }
+
+  Future<void> savePref(String key, String value) => _storage.write(key: key, value: value);
+  Future<String?> readPref(String key) => _storage.read(key: key);
+  Future<void> deletePref(String key) => _storage.delete(key: key);
 
   /// Caché local para mostrar el último inventario cuando no hay conexión.
   Future<void> saveCache(String key, String value) => _storage.write(key: 'cache_$key', value: value);
