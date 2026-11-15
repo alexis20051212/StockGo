@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -96,14 +95,15 @@ class ApiClient {
           'El servidor tardó demasiado en responder. Intenta de nuevo.',
           null,
           ApiError.tiempoAgotado);
-    } on IOException {
+    } on http.ClientException {
+      throw ApiException('Sin conexión con el servidor. Revisa tu red.',
+          null, ApiError.sinConexion);
+    } catch (_) {
+      // Móvil (SocketException) y web (fallos de red/CORS): sin dart:io para que compile en web.
       throw ApiException(
           'Sin conexión a Internet. Revisa tu red e intenta de nuevo.',
           null,
           ApiError.sinConexion);
-    } on http.ClientException {
-      throw ApiException('Sin conexión con el servidor. Revisa tu red.',
-          null, ApiError.sinConexion);
     }
 
     // Respuestas de texto (por ejemplo, el CSV del inventario)
