@@ -31,14 +31,14 @@ class PeekingDialog extends StatelessWidget {
         children: [
           Container(
             width: cardW,
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: context.surface, borderRadius: BorderRadius.circular(24)),
             padding: EdgeInsets.fromLTRB(24, handsIn + 12, 24, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DefaultTextStyle.merge(
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: context.ink),
                   child: title,
                 ),
                 const SizedBox(height: 14),

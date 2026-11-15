@@ -39,7 +39,7 @@ class AuditScreen extends StatelessWidget {
                   child: ListTile(
                     leading: Icon(_icon('${a['accion']}'), color: AppColors.blue),
                     title: Text('${a['usuario']} · ${a['accion']} ${a['entidad']}',
-                        style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy)),
+                        style: TextStyle(fontWeight: FontWeight.w700, color: context.ink)),
                     subtitle: Text('${a['detalle'] ?? ''}\n$fecha'),
                     isThreeLine: true,
                   ),

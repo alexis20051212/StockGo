@@ -82,6 +82,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _menu(String v) async {
     switch (v) {
+      case 'tema':
+        await ThemeController.instance.toggle();
+        break;
       case 'perfil':
         await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
         final n = await AuthRepository().name();
@@ -118,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
               child: Icon(icon, color: c),
             ),
-            title: Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color ?? AppColors.navy)),
+            title: Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color ?? context.ink)),
             subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
             trailing: Icon(Icons.chevron_right, color: Colors.blueGrey.shade300),
             onTap: () => Navigator.pop(ctx, value),
@@ -140,19 +143,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(_nombre, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.ink)),
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
                         child: Text(_isAdmin ? 'Administrador' : 'Empleado',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy)),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.ink)),
                       ),
                     ]),
                   ),
                 ]),
               ),
               const Divider(height: 1),
+              tile(context.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  context.dark ? 'Modo claro' : 'Modo oscuro', 'Cambiar el aspecto de la app', 'tema'),
               tile(Icons.person_outline, 'Mi perfil', 'Cambiar nombre y contraseña', 'perfil'),
               if (_isAdmin) tile(Icons.download_outlined, 'Exportar inventario', 'Copiar el inventario en formato CSV', 'export'),
               if (_isAdmin) tile(Icons.history, 'Registro de acciones', 'Quién creó, editó o eliminó', 'audit'),
@@ -244,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
               selectedIndex: _tab.clamp(0, destinos.length - 1),
               onDestinationSelected: (i) => setState(() => _tab = i),
               extended: ancho >= 1200,
-              backgroundColor: Colors.white,
+              backgroundColor: context.surface,
               indicatorColor: AppColors.blue.withValues(alpha: 0.16),
               labelType: ancho >= 1200 ? NavigationRailLabelType.none : NavigationRailLabelType.all,
               destinations: [
@@ -290,7 +295,7 @@ class _Empty extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Text(text,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.blueGrey.shade500, fontSize: 16, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: context.muted, fontSize: 16, fontWeight: FontWeight.w600)),
         ),
       ]);
 }
@@ -409,7 +414,7 @@ class _InventoryViewState extends State<InventoryView> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(p.nombre, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: context.ink)),
           ),
           ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Editar producto'), onTap: () => Navigator.pop(ctx, 'editar')),
           ListTile(leading: const Icon(Icons.delete_outline, color: AppColors.red), title: const Text('Eliminar producto'), onTap: () => Navigator.pop(ctx, 'eliminar')),
@@ -549,7 +554,7 @@ class _InventoryViewState extends State<InventoryView> {
               const SizedBox(height: 12),
               Text('Datos de producto: Open Food Facts (licencia ODbL)',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade400)),
+                  style: TextStyle(fontSize: 11, color: context.muted)),
             ]),
           ),
           actions: [
@@ -709,7 +714,7 @@ class _Stat extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.surface,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: color.withValues(alpha: 0.18)),
             boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4))],
@@ -722,7 +727,7 @@ class _Stat extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: color)),
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade500)),
+            Text(label, style: TextStyle(fontSize: 12, color: context.muted)),
           ]),
         ),
       );
@@ -741,10 +746,10 @@ class _ProductCard extends StatelessWidget {
     return Card(
       elevation: 2,
       shadowColor: Colors.black12,
-      color: low ? const Color(0xFFFFF7F7) : Colors.white,
+      color: low ? (context.dark ? const Color(0xFF2B1A22) : const Color(0xFFFFF7F7)) : context.surface,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: low ? AppColors.red.withValues(alpha: 0.3) : Colors.blueGrey.shade50)),
+          side: BorderSide(color: low ? AppColors.red.withValues(alpha: 0.3) : context.line)),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
@@ -757,7 +762,7 @@ class _ProductCard extends StatelessWidget {
               child: Container(
                 width: 68,
                 height: 68,
-                color: AppColors.bg,
+                color: context.dark ? const Color(0xFF0F1A2E) : AppColors.bg,
                 child: p.imagenUrl != null && p.imagenUrl!.isNotEmpty
                     ? Image.network(p.imagenUrl!, fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: AppColors.blue))
@@ -768,10 +773,10 @@ class _ProductCard extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(p.nombre, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.navy)),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: context.ink)),
                 if (sub.isNotEmpty)
                   Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade400)),
+                      style: TextStyle(fontSize: 12, color: context.muted)),
               ]),
             ),
             const SizedBox(width: 8),
@@ -807,8 +812,8 @@ class _MoveSheetState extends State<_MoveSheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(widget.p.nombre, textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
-        Text('Stock actual: ${widget.p.stock}', style: TextStyle(color: Colors.blueGrey.shade500)),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.ink)),
+        Text('Stock actual: ${widget.p.stock}', style: TextStyle(color: context.muted)),
         const SizedBox(height: 18),
         SegmentedButton<String>(
           segments: const [
@@ -878,7 +883,7 @@ class _WeeklyChartState extends State<_WeeklyChart> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text.rich(TextSpan(style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade500), children: const [
+            Text.rich(TextSpan(style: TextStyle(fontSize: 12, color: context.muted), children: const [
               TextSpan(text: 'Últimos 7 días:  '),
               TextSpan(text: '■ entradas  ', style: TextStyle(color: AppColors.green)),
               TextSpan(text: '■ salidas', style: TextStyle(color: AppColors.red)),
@@ -894,7 +899,7 @@ class _WeeklyChartState extends State<_WeeklyChart> {
                             const SizedBox(width: 2),
                             bar(e['salidas'] as int, AppColors.red),
                           ]),
-                          Text('${e['fecha']}'.substring(8), style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400)),
+                          Text('${e['fecha']}'.substring(8), style: TextStyle(fontSize: 10, color: context.muted)),
                         ]),
                       ))
                   .toList(),
@@ -1015,7 +1020,7 @@ class _MovementsViewState extends State<MovementsView> {
                         leading: CircleAvatar(
                             backgroundColor: color.withValues(alpha: 0.12),
                             child: Icon(entrada ? Icons.arrow_downward : Icons.arrow_upward, color: color)),
-                        title: Text('${m['producto']}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy)),
+                        title: Text('${m['producto']}', style: TextStyle(fontWeight: FontWeight.w700, color: context.ink)),
                         subtitle: Text('${m['usuario']} · $fecha'),
                         trailing: Text('${entrada ? '+' : '-'}${m['cantidad']}',
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),

@@ -170,9 +170,9 @@ Future<void> showNotifSheet(BuildContext context) {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 8, 4),
             child: Row(children: [
-              const Expanded(
+              Expanded(
                   child: Text('Notificaciones',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy))),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: context.ink))),
               if (svc.sinLeer > 0) TextButton(onPressed: svc.marcarTodas, child: const Text('Marcar leídas')),
               if (svc.items.isNotEmpty) TextButton(onPressed: svc.borrarTodas, child: const Text('Borrar')),
             ]),

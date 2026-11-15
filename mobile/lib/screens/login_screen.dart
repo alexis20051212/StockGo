@@ -37,9 +37,11 @@ class _LoginScreenState extends State<LoginScreen> {
   // Estado del servidor, huella, tema y otros
   _Server _server = _Server.comprobando;
   bool _showConnecting = false;
+  String? _serverMsg; // mensaje cuando el servidor responde con error (no es falta de internet)
   Timer? _connTimer;
   bool _bioSupported = false, _bioEnabled = false;
-  bool _dark = false, _caps = false, _success = false;
+  bool _caps = false, _success = false;
+  bool get _dark => Theme.of(context).brightness == Brightness.dark; // tema global de la app
 
   @override
   void initState() {
@@ -60,7 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
   // ───────── Preferencias, huella y servidor ─────────
   Future<void> _loadPrefs() async {
     final email = await _api.readPref('pref_email');
-    final dark = await _api.readPref('pref_dark');
     var supported = false;
     try {
       supported = await _auth.isDeviceSupported() && (await _auth.getAvailableBiometrics()).isNotEmpty;
@@ -69,7 +70,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() {
       if (email != null && _email.text.isEmpty) _email.text = email;
-      _dark = dark == '1';
       _bioSupported = supported;
       _bioEnabled = supported && bioPass != null;
     });
@@ -80,6 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _server = _Server.comprobando;
       _showConnecting = false;
+      _serverMsg = null;
     });
     _connTimer?.cancel();
     _connTimer = Timer(const Duration(seconds: 4), () {
@@ -92,16 +93,20 @@ class _LoginScreenState extends State<LoginScreen> {
         _firstRun = !h;
         _server = _Server.ok;
       });
-    } catch (_) {
-      if (mounted) setState(() => _server = _Server.sinConexion);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _server = _Server.sinConexion;
+          _serverMsg = (e is ApiException && e.tipo != ApiError.sinConexion && e.tipo != ApiError.tiempoAgotado)
+              ? 'El servidor tiene un problema (${e.message}). Intenta más tarde.'
+              : null;
+        });
+      }
     }
     _connTimer?.cancel();
   }
 
-  Future<void> _toggleDark() async {
-    setState(() => _dark = !_dark);
-    await _api.savePref('pref_dark', _dark ? '1' : '0');
-  }
+  Future<void> _toggleDark() => ThemeController.instance.toggle();
 
   Future<void> _loginWithBio() async {
     if (_loading || _cooldown > 0) return;
@@ -318,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Expanded(
           child: Text(
             offline
-                ? 'Sin conexión con el servidor. Revisa tu internet.'
+                ? (_serverMsg ?? 'Sin conexión con el servidor. Revisa tu internet.')
                 : 'Conectando con el servidor… puede tardar hasta 50 s la primera vez.',
             style: const TextStyle(fontSize: 13, color: Color(0xFF3B3B3B)),
           ),

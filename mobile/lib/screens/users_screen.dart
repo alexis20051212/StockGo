@@ -176,7 +176,7 @@ class _UsersViewState extends State<UsersView> {
                       itemBuilder: (_, i) {
                         final u = _users[i];
                         final admin = u.rol == 'admin';
-                        final color = admin ? AppColors.navy : AppColors.blue;
+                        final color = admin ? (context.dark ? const Color(0xFF8FB4FF) : AppColors.navy) : AppColors.blue;
                         return Card(
                           child: ListTile(
                             leading: CircleAvatar(
@@ -186,7 +186,7 @@ class _UsersViewState extends State<UsersView> {
                             title: Text(u.nombre,
                                 style: TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    color: u.activo ? AppColors.navy : Colors.blueGrey.shade300,
+                                    color: u.activo ? context.ink : Colors.blueGrey.shade300,
                                     decoration: u.activo ? null : TextDecoration.lineThrough)),
                             subtitle: Text(
                                 '${u.email}\n${admin ? 'Administrador' : 'Empleado'}${u.activo ? '' : ' · Desactivado'}'),
