@@ -7,7 +7,9 @@ import 'screens/login_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ThemeController.instance.load();
   // Si el servidor responde 401, se regresa al inicio de sesión
   ApiClient.onUnauthorized = () => navigatorKey.currentState
       ?.pushAndRemoveUntil(
@@ -18,11 +20,15 @@ void main() {
 class StockGoApp extends StatelessWidget {
   const StockGoApp({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: ThemeController.instance,
+        builder: (_, __) => MaterialApp(
         navigatorKey: navigatorKey,
         title: 'StockGo',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
+        darkTheme: buildDarkTheme(),
+        themeMode: ThemeController.instance.mode,
         home: FutureBuilder<bool>(
           future: AuthRepository().isLogged(),
           builder: (_, s) {
@@ -30,5 +36,5 @@ class StockGoApp extends StatelessWidget {
             return s.data! ? const HomeScreen() : const LoginScreen();
           },
         ),
-      );
+      ));
 }
