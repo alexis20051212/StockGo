@@ -1,0 +1,24 @@
+# Netlify copia este archivo a la raíz publicada (mobile/build/web).
+# Archivos de entrada: siempre se revalidan para que una versión nueva llegue de inmediato.
+/index.html
+  Cache-Control: no-cache
+/flutter_service_worker.js
+  Cache-Control: no-cache
+/flutter_bootstrap.js
+  Cache-Control: no-cache
+/main.dart.js
+  Cache-Control: no-cache
+/version.json
+  Cache-Control: no-cache
+/manifest.json
+  Cache-Control: no-cache
+
+# Recursos que casi no cambian: se guardan un día en el navegador.
+/canvaskit/*
+  Cache-Control: public, max-age=86400
+/assets/*
+  Cache-Control: public, max-age=86400
+/icons/*
+  Cache-Control: public, max-age=86400
+/favicon.png
+  Cache-Control: public, max-age=86400
