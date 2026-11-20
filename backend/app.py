@@ -91,7 +91,7 @@ def validar_password(pw):
         falta.append("al menos 8 caracteres")
     if not any(c in string.digits for c in pw):
         falta.append("un número")
-    if not any(c in string.punctuation for c in pw):
+    if not any(c in string.ascii_letters for c in pw):
         falta.append("un carácter especial")
     if not falta:
         return None
