@@ -3,6 +3,7 @@ import jwt, requests, mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, g, Response
 from flask_cors import CORS
+from flask_compress import Compress
 from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
@@ -11,6 +12,9 @@ app = Flask(__name__)
 # (varios separados por coma). La autenticación va en el encabezado Bearer, no en cookies.
 CORS(app, origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()],
      allow_headers=["Content-Type", "Authorization"], expose_headers=["Retry-After"], max_age=600)
+# Compresión gzip de las respuestas JSON (menos datos por la red, más rápido en móvil)
+app.config["COMPRESS_MIN_SIZE"] = 500
+Compress(app)
 SECRET = os.environ["SECRET_KEY"]  # variable de entorno, nunca en código
 
 
