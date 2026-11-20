@@ -8,8 +8,7 @@ import '../core/theme.dart';
 import '../repositories/repositories.dart';
 import 'home_screen.dart';
 
-const _appVersion = 'v1.0.0';
-
+const _appVersion = 'v1.1.0';
 enum _Server { comprobando, ok, sinConexion }
 
 class LoginScreen extends StatefulWidget {
